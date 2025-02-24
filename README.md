@@ -1,5 +1,10 @@
 # 应用使用监控系统
 
+![Python Version](https://img.shields.io/badge/python-3.x-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+
 一个用于监控和记录 Windows 应用程序使用情况的工具，支持实时监控、数据统计和自定义显示。
 
 ## 功能特点
