@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>应用监控</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            font-weight: bold;
+        }
+        .app-title {
+            color: #0d6efd;
+            font-weight: bold;
+        }
+        .window-title {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+        .nav-link {
+            color: #495057;
+        }
+        .nav-link.active {
+            font-weight: bold;
+        }
+        .last-updated {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            .card {
+                margin-bottom: 15px;
+            }
+        }
+        .btn-group .btn {
+            padding: 0.375rem 1rem;
+            font-weight: 500;
+            border-radius: 20px;
+            margin: 0 2px;
+        }
+        
+        .btn-group .btn.active {
+            box-shadow: 0 2px 4px rgba(13, 110, 253, 0.2);
+        }
+        
+        @media (max-width: 768px) {
+            .navbar-brand {
+                font-size: 1.1rem;
+            }
+            .btn-group .btn {
+                padding: 0.25rem 0.75rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand navbar-light bg-light">
+        <div class="container">
+            <span class="navbar-brand">应用监控</span>
+            <div class="navbar-nav ms-auto">
+                <div class="btn-group" role="group">
+                    <a class="btn btn-primary active" href="/">当前状态</a>
+                    <a class="btn btn-outline-primary" href="/history">历史记录</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- 前台应用 -->
+        <div class="card">
+            <div class="card-header">
+                当前前台应用
+            </div>
+            <div class="card-body">
+                <h5 class="app-title" id="foreground-app-name">{{ foreground_app.process_name }}</h5>
+                <p class="window-title" id="foreground-app-title">{{ foreground_app.window_title }}</p>
+            </div>
+        </div>
+
+        <!-- 运行中的应用 -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>运行中的应用</span>
+                <small class="last-updated" id="last-updated">最近更新：--</small>
+            </div>
+            <div class="card-body">
+                <div class="list-group" id="running-apps">
+                    {% for app in running_apps %}
+                        <div class="list-group-item">
+                            <h6 class="app-title mb-1">{{ app.process_name }}</h6>
+                            {% if app.window_titles %}
+                                {% for title in app.window_titles %}
+                                    <p class="window-title mb-1">{{ title }}</p>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="text-muted">启动时间: {{ app.process_start_time }}</small>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function updateForeground() {
+            fetch('/foreground')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('foreground-app-name').textContent = data.process_name;
+                    document.getElementById('foreground-app-title').textContent = data.window_title;
+                });
+        }
+
+        function updateRunningApps() {
+            fetch('/api/running_apps')
+                .then(response => response.json())
+                .then(data => {
+                    const runningAppsList = document.getElementById('running-apps');
+                    runningAppsList.innerHTML = '';  // 清空现有列表
+                    
+                    data.forEach(app => {
+                        const item = document.createElement('div');
+                        item.className = 'list-group-item';
+                        
+                        const title = document.createElement('h6');
+                        title.className = 'app-title mb-1';
+                        title.textContent = app.process_name;
+                        item.appendChild(title);
+                        
+                        if (app.window_titles) {
+                            app.window_titles.forEach(windowTitle => {
+                                const p = document.createElement('p');
+                                p.className = 'window-title mb-1';
+                                p.textContent = windowTitle;
+                                item.appendChild(p);
+                            });
+                        }
+                        
+                        const startTime = document.createElement('small');
+                        startTime.className = 'text-muted';
+                        startTime.textContent = `启动时间: ${app.process_start_time}`;
+                        item.appendChild(startTime);
+                        
+                        runningAppsList.appendChild(item);
+                    });
+
+                    // 更新最后更新时间
+                    const now = new Date();
+                    const formattedTime = now.toLocaleTimeString();
+                    document.getElementById('last-updated').textContent = `最近更新：${formattedTime}`;
+                });
+        }
+
+        // 每秒更新前台应用信息
+        setInterval(updateForeground, 1000);
+        updateForeground();
+
+        // 每5秒更新运行中的应用列表
+        setInterval(updateRunningApps, 5000);
+        updateRunningApps();
+    </script>
+</body>
+</html>
