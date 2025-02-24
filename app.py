@@ -114,9 +114,14 @@ def get_running_applications():
     - process_name: 进程名称（可能是自定义的显示名称）
     - window_titles: 该进程的所有窗口标题
     - process_start_time: 进程启动时间
+    - ignore_title_changes: 是否忽略标题变化
     """
     settings = load_config()
     app_list = []
+    
+    # 用于存储进程的第一个标题
+    first_titles = {}
+    
     for process in psutil.process_iter(['pid', 'name', 'create_time']):
         try:
             process_name = process.info['name']
@@ -140,13 +145,22 @@ def get_running_applications():
 
             # 只记录有窗口的应用程序
             if window_titles:
-                # 如果设置了忽略标题变化，只保留第一个标题
-                if process_name in settings['ignore_title_changes']:
-                    window_titles = window_titles[:1]
+                # 检查是否忽略标题变化
+                ignore_title = process_name in settings['ignore_title_changes']
+                
+                # 如果设置了忽略标题变化
+                if ignore_title:
+                    # 如果是第一次遇到这个进程，保存它的第一个标题
+                    if process_name not in first_titles:
+                        first_titles[process_name] = display_name
+                    # 使用保存的第一个标题
+                    window_titles = [first_titles[process_name]]
+                
                 app_list.append({
                     "process_name": display_name,
                     "window_titles": window_titles,
-                    "process_start_time": process_start_time
+                    "process_start_time": process_start_time,
+                    "ignore_title_changes": ignore_title  # 添加标志
                 })
 
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):

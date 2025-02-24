@@ -1,16 +1,14 @@
 {
     "ignore_title_changes": [
-        "msedge.exe",
-        "Telegram.exe"
+        "msedge.exe"
     ],
-    "custom_names": {
-        "Telegram.exe": "Telegram"
-    },
+    "custom_names": {},
     "hidden_from_web": [
         "python.exe",
         "WindowsTerminal.exe",
         "TextInputHost.exe",
-        "ApplicationFrameHost.exe"
+        "ApplicationFrameHost.exe",
+        "Telegram.exe"
     ],
     "hidden_app_display": {
         "process_name": "微信",

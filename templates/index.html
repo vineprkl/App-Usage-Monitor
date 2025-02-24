@@ -143,13 +143,22 @@
                         title.textContent = app.process_name;
                         item.appendChild(title);
                         
-                        if (app.window_titles) {
-                            app.window_titles.forEach(windowTitle => {
+                        if (app.window_titles && app.window_titles.length > 0) {
+                            // 如果设置了忽略标题变化，只显示进程名称
+                            if (app.ignore_title_changes) {
                                 const p = document.createElement('p');
                                 p.className = 'window-title mb-1';
-                                p.textContent = windowTitle;
+                                p.textContent = app.process_name;
                                 item.appendChild(p);
-                            });
+                            } else {
+                                // 否则显示所有窗口标题
+                                app.window_titles.forEach(windowTitle => {
+                                    const p = document.createElement('p');
+                                    p.className = 'window-title mb-1';
+                                    p.textContent = windowTitle;
+                                    item.appendChild(p);
+                                });
+                            }
                         }
                         
                         const startTime = document.createElement('small');

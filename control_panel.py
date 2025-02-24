@@ -414,12 +414,23 @@ class AppMonitorControl:
                 
                 # 如果有窗口标题，则添加到进程字典中
                 if titles:
+                    is_ignored = process_name in self.settings.get('ignore_title_changes', [])
                     if display_name not in process_windows:
                         process_windows[display_name] = {
                             'process_name': process_name,
-                            'titles': set()
+                            'titles': set(),
+                            'ignore_title': is_ignored,
+                            'first_title': titles[0] if titles else ''  # 保存第一个标题
                         }
-                    process_windows[display_name]['titles'].update(titles)
+                    
+                    if is_ignored:
+                        # 如果忽略标题变化，只保存第一个标题
+                        if not process_windows[display_name]['first_title']:
+                            process_windows[display_name]['first_title'] = titles[0]
+                        process_windows[display_name]['titles'] = {process_windows[display_name]['first_title']}
+                    else:
+                        # 不忽略标题变化，保存所有标题
+                        process_windows[display_name]['titles'].update(titles)
                     
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -455,13 +466,22 @@ class AppMonitorControl:
                 selected_new_index = new_index
             new_index += 1
             
-            # 添加该进程的所有窗口标题（作为子项）
-            for title in sorted(info['titles']):
-                list_item = f"    {title}"
+            # 添加窗口标题（作为子项）
+            if info['ignore_title']:
+                # 如果忽略标题变化，只显示第一个标题
+                list_item = f"    {info['first_title']}"
                 self.app_list.insert(tk.END, list_item)
                 if selected_item and selected_item == list_item:
                     selected_new_index = new_index
                 new_index += 1
+            else:
+                # 不忽略标题变化，显示所有标题
+                for title in sorted(info['titles']):
+                    list_item = f"    {title}"
+                    self.app_list.insert(tk.END, list_item)
+                    if selected_item and selected_item == list_item:
+                        selected_new_index = new_index
+                    new_index += 1
         
         # 如果找到了之前选中的项目，重新选中它
         if selected_new_index is not None:
