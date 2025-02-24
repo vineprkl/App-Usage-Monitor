@@ -108,21 +108,27 @@ def get_display_name(process_name):
     return config.APP_DISPLAY_NAMES.get(process_name, process_name)
 
 def get_running_applications():
-    """获取所有运行的应用程序（类似于任务管理器）"""
+    """获取当前运行的所有应用程序信息
+    
+    返回一个列表，每个元素包含：
+    - process_name: 进程名称（可能是自定义的显示名称）
+    - window_titles: 该进程的所有窗口标题
+    - process_start_time: 进程启动时间
+    """
     settings = load_config()
     app_list = []
     for process in psutil.process_iter(['pid', 'name', 'create_time']):
         try:
             process_name = process.info['name']
             
-            # 检查是否在忽略列表中或隐藏列表中
+            # 跳过被忽略或隐藏的应用
             if process_name in settings['ignored_apps'] or process_name in settings['hidden_from_web']:
                 continue
                 
             process_start_time = datetime.datetime.fromtimestamp(process.info['create_time']).strftime("%Y-%m-%d %H:%M:%S")
             display_name = get_display_name(process_name)
 
-            # 获取进程的所有窗口标题
+            # 获取这个进程的所有窗口标题
             def callback(hwnd, window_titles):
                 if win32gui.IsWindowVisible(hwnd) and win32process.GetWindowThreadProcessId(hwnd)[1] == process.info['pid']:
                      window_title = win32gui.GetWindowText(hwnd)
@@ -132,8 +138,9 @@ def get_running_applications():
             window_titles = []
             win32gui.EnumWindows(callback, window_titles)
 
-            if window_titles:  # 只有有窗口标题的才添加到列表
-                # 如果在忽略标题变化列表中，只保留第一个标题
+            # 只记录有窗口的应用程序
+            if window_titles:
+                # 如果设置了忽略标题变化，只保留第一个标题
                 if process_name in settings['ignore_title_changes']:
                     window_titles = window_titles[:1]
                 app_list.append({
@@ -148,20 +155,27 @@ def get_running_applications():
     return app_list
 
 def get_foreground_window_info():
-    """获取前台窗口的信息"""
+    """获取当前前台窗口的信息
+    
+    返回一个字典，包含：
+    - process_name: 进程名称（可能是自定义的显示名称）
+    - window_title: 窗口标题
+    
+    如果是隐藏的应用，会返回配置中设置的替代显示文本
+    """
     settings = load_config()
     hwnd = win32gui.GetForegroundWindow()
-    if hwnd and settings['monitoring_enabled']:  # 检查是否启用监控
+    if hwnd and settings['monitoring_enabled']:
         try:
             thread_id, process_id = win32process.GetWindowThreadProcessId(hwnd)
             process = psutil.Process(process_id)
             process_name = process.name()
             
-            # 检查是否在忽略列表中
+            # 如果是被忽略的应用，返回空值
             if process_name in settings['ignored_apps']:
                 return {"process_name": "None", "window_title": "None"}
             
-            # 检查是否在隐藏列表中
+            # 如果是隐藏的应用，返回自定义显示文本
             if process_name in settings.get('hidden_from_web', []):
                 hidden_display = settings.get('hidden_app_display', config.HIDDEN_APP_DISPLAY)
                 return {
@@ -172,7 +186,7 @@ def get_foreground_window_info():
             window_title = win32gui.GetWindowText(hwnd)
             display_name = get_display_name(process_name)
             
-            # 如果在忽略标题变化列表中，返回进程名作为标题
+            # 如果设置了忽略标题变化，窗口标题显示为进程名
             if process_name in settings['ignore_title_changes']:
                 window_title = display_name
                 
@@ -180,24 +194,31 @@ def get_foreground_window_info():
         except psutil.NoSuchProcess:
             return {"process_name": "Unknown", "window_title": "Unknown"}
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"获取前台窗口信息时出错: {e}")
             return {"process_name": "Error", "window_title": "Error"}
     else:
         return {"process_name": "None", "window_title": "None"}
 
 def update_database():
-    """更新数据库"""
+    """更新数据库中的应用使用记录
+    
+    主要功能：
+    1. 记录新启动的应用
+    2. 更新已关闭应用的结束时间
+    3. 处理前台应用的特殊情况
+    4. 清理过期数据
+    """
     settings = load_config()
     if not settings['monitoring_enabled']:
         return
         
     create_table()
 
-    # Get running apps and foreground app info
+    # 获取当前运行的应用和前台应用信息
     running_apps = get_running_applications()
     foreground_app = get_foreground_window_info()
 
-    # 检查前台应用是否在隐藏列表中
+    # 检查前台应用是否需要隐藏
     thread_id, process_id = win32process.GetWindowThreadProcessId(win32gui.GetForegroundWindow())
     try:
         foreground_process = psutil.Process(process_id)
@@ -206,17 +227,17 @@ def update_database():
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         pass
 
-    # Get running apps from the database
+    # 获取数据库中的运行中应用列表
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT process_name, window_title FROM app_usage WHERE end_time IS NULL")
     db_running_apps = set([(row['process_name'], row['window_title']) for row in cur.fetchall()])
     conn.close()
 
-    # Insert each running app into the database
+    # 记录新启动的应用
     now = datetime.datetime.now()
     for app in running_apps:
-        # 检查应用是否在隐藏列表中
+        # 检查是否使用了自定义名称
         original_name = None
         for proc_name, custom_name in settings.get('custom_names', {}).items():
             if custom_name == app['process_name']:
@@ -224,21 +245,25 @@ def update_database():
                 break
         process_name = original_name or app['process_name']
         
+        # 跳过隐藏的应用
         if process_name in settings.get('hidden_from_web', []):
             continue
             
-        is_foreground = 0  # 默认设为后台
+        # 设置应用的前台/后台状态
+        is_foreground = 0  # 默认为后台
         if foreground_app['process_name'] == app['process_name'] and foreground_app['window_title']:
             is_foreground = 1
+            
+        # 记录新的窗口
         for title in app['window_titles']:
              if (app['process_name'], title) not in db_running_apps:
                 insert_data(app['process_name'], title, now, is_foreground)
 
+    # 更新已关闭应用的结束时间
     conn = get_db_connection()
     cur = conn.cursor()
-    # Update end time for stopped apps
     cur.execute("SELECT process_name, window_title FROM app_usage WHERE end_time IS NULL")
-    db_running_apps =  [(row['process_name'], row['window_title']) for row in cur.fetchall()]
+    db_running_apps = [(row['process_name'], row['window_title']) for row in cur.fetchall()]
     conn.close()
 
     for process_name, window_title in db_running_apps:
@@ -249,13 +274,11 @@ def update_database():
                     found = True
                     break
         if not found:
-            print(f"Attempting to update end time for: {process_name} - {window_title}")  # 添加调试信息
             update_end_time(process_name, window_title)
 
-
-    #如果没窗口的程序是前台
-    if foreground_app['process_name'] !=  "None" and not any(app['process_name'] == foreground_app['process_name'] for app in running_apps):
-        # 检查前台应用是否在隐藏列表中
+    # 处理没有窗口但在前台的特殊应用
+    if foreground_app['process_name'] != "None" and not any(app['process_name'] == foreground_app['process_name'] for app in running_apps):
+        # 检查是否使用了自定义名称
         original_name = None
         for proc_name, custom_name in settings.get('custom_names', {}).items():
             if custom_name == foreground_app['process_name']:
@@ -263,15 +286,16 @@ def update_database():
                 break
         process_name = original_name or foreground_app['process_name']
         
+        # 如果不是隐藏的应用，记录它
         if process_name not in settings.get('hidden_from_web', []):
-            # 如果之前没记录这个程序 直接记录一个
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT process_name, window_title FROM app_usage WHERE process_name = ? and window_title = ?", (foreground_app['process_name'],foreground_app['window_title']))
-            app_check =cur.fetchone()
+            cur.execute("SELECT process_name, window_title FROM app_usage WHERE process_name = ? and window_title = ?", 
+                       (foreground_app['process_name'], foreground_app['window_title']))
+            app_check = cur.fetchone()
             conn.close()
             if not app_check:
-                 insert_data(foreground_app['process_name'], foreground_app['window_title'], now, 1)
+                insert_data(foreground_app['process_name'], foreground_app['window_title'], now, 1)
 
 def cleanup_database():
     """清理数据库，删除旧数据"""

@@ -11,11 +11,19 @@ from datetime import datetime
 
 # 创建自定义的日志处理器
 class TkinterHandler(logging.Handler):
+    """用于在GUI界面显示日志的自定义处理器
+    
+    将日志消息显示在Tkinter文本框中，支持实时更新和自动滚动
+    """
     def __init__(self, text_widget):
         logging.Handler.__init__(self)
         self.text_widget = text_widget
     
     def emit(self, record):
+        """处理日志记录
+        
+        将日志消息添加到文本框末尾，并自动滚动到最新位置
+        """
         msg = self.format(record)
         def append():
             if self.text_widget:
@@ -23,7 +31,7 @@ class TkinterHandler(logging.Handler):
                     self.text_widget.configure(state='normal')
                     self.text_widget.insert(tk.END, msg + '\n')
                     self.text_widget.configure(state='disabled')
-                    self.text_widget.see(tk.END)
+                    self.text_widget.see(tk.END)  # 滚动到最新位置
                 except:
                     pass
         if self.text_widget:
@@ -31,70 +39,73 @@ class TkinterHandler(logging.Handler):
 
 # 创建自定义的stdout和stderr处理器
 class LoggerWriter:
+    """用于重定向标准输出和错误流的自定义写入器
+    
+    将print和系统错误信息转换为日志消息
+    """
     def __init__(self, logger, level):
         self.logger = logger
         self.level = level
         self.buffer = ''
     
     def write(self, message):
-        if message.strip():  # 忽略空消息
+        """将消息写入日志系统"""
+        if message.strip():  # 忽略空白消息
             self.logger.log(self.level, message.strip())
     
     def flush(self):
+        """刷新缓冲区（为了兼容性而保留）"""
         pass
 
 class AppMonitorControl:
     def __init__(self):
+        """初始化应用监控控制面板
+        
+        创建主窗口、设置样式、初始化日志系统和配置
+        """
         self.root = tk.Tk()
         self.root.title("应用监控控制面板")
         self.root.geometry("800x600")
         self.root.minsize(600, 500)
         
-        # 创建自定义样式
+        # 创建危险操作按钮的样式
         style = ttk.Style()
         style.configure('Danger.TButton', foreground='red')
         
-        # 配置文件路径
+        # 初始化配置和日志系统
         self.config_file = 'settings.json'
-        
-        # 保存原始的stdout和stderr
         self.original_stdout = sys.stdout
         self.original_stderr = sys.stderr
-        
-        # 创建日志文本框
         self.log_text = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, height=1)
         
-        # 设置日志系统
+        # 设置系统
         self.setup_logging()
-        
-        # 加载配置
         self.load_config()
-        
-        # 创建界面
         self.create_gui()
         
-        # 定期更新应用列表
+        # 启动自动更新
         self.update_running_apps()
         
-        # 设置关闭窗口时的处理
+        # 设置关闭窗口的处理
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
     def on_closing(self):
-        """窗口关闭时的处理"""
+        """处理窗口关闭事件
+        
+        恢复标准输出流、清理日志处理器、关闭程序
+        """
         try:
-            # 恢复原始的stdout和stderr
+            # 恢复原始的输出流
             sys.stdout = self.original_stdout
             sys.stderr = self.original_stderr
             
-            # 移除所有日志处理器
+            # 清理日志处理器
             logger = logging.getLogger()
             for handler in logger.handlers[:]:
                 logger.removeHandler(handler)
             
-            # 销毁窗口
+            # 关闭窗口并退出程序
             self.root.destroy()
-            
-            # 退出程序
             os._exit(0)
         except Exception as e:
             print(f"关闭窗口时出错: {e}")
@@ -111,30 +122,35 @@ class AppMonitorControl:
             pass
     
     def setup_logging(self):
-        """设置日志系统"""
-        # 配置根日志记录器
+        """设置日志系统
+        
+        配置日志格式、处理器，并重定向标准输出流
+        """
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
         
-        # 创建格式化器
+        # 设置日志格式
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
                                     datefmt='%Y-%m-%d %H:%M:%S')
         
-        # 添加处理器
+        # 添加GUI日志处理器
         handler = TkinterHandler(self.log_text)
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
         
-        # 重定向stdout和stderr到日志系统
+        # 重定向标准输出和错误流
         sys.stdout = LoggerWriter(self.logger, logging.INFO)
         sys.stderr = LoggerWriter(self.logger, logging.ERROR)
     
     def load_config(self):
-        """加载配置文件"""
+        """加载配置文件
+        
+        读取或创建配置文件，包含应用程序的各种设置
+        """
         default_settings = {
             'ignore_title_changes': [],  # 忽略标题变化的应用
             'custom_names': {},          # 自定义显示名称
-            'hidden_from_web': [],        # 在Web端隐藏的应用
+            'hidden_from_web': [],       # 在Web端隐藏的应用
             'hidden_app_display': {}     # 隐藏应用的显示设置
         }
         
@@ -152,7 +168,10 @@ class AppMonitorControl:
             self.settings = default_settings
     
     def save_config(self):
-        """保存配置"""
+        """保存配置到文件
+        
+        将当前设置写入JSON配置文件
+        """
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, ensure_ascii=False, indent=4)
